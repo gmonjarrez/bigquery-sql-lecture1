@@ -1,0 +1,263 @@
+---
+title: "BigQuery SQL Lecture 1"
+subtitle: "GA4 Ecommerce: Selection, Filtering, Sorting, and Aggregation"
+author: "Georgia Monjarrez"
+date: "2026-10-29"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    embed-resources: true
+    code-copy: true
+    highlight-style: github
+    title-block-banner: "#163b50"
+execute:
+  eval: false
+---
+
+# Overview
+
+This notebook documents the 10 SQL examples in Lecture 1 using the public GA4 obfuscated ecommerce dataset. The examples cover seven lecture topics; sorting, counting, and grouping each include an additional example. SQL is displayed in non-executing fenced blocks, with an explanation of each query and how to interpret its output.
+
+::: {.callout-note}
+## Execution verified
+
+All 10 queries were run successfully in BigQuery sandbox on October 29, 2026. Each screenshot below shows the actual query and the visible portion of its result table. Longer result sets extend beyond the rows shown in the screenshot.
+:::
+
+# Lecture queries
+
+## Query 01: Selecting columns and limiting rows
+
+### SQL
+
+```sql
+SELECT event_date, event_name
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+LIMIT 20;
+```
+
+### Explanation and interpretation
+
+Selects the event date and event name from the daily event tables and returns at most 20 rows. Each row represents an event. Without ORDER BY, the selected rows and their order are not guaranteed. LIMIT restricts the output, but does not by itself restrict which daily tables are scanned.
+
+### BigQuery output
+
+![BigQuery results for Query 01](images/query-01.png){fig-alt="Actual BigQuery SQL and results for Query 01"}
+
+**Observed output.** The result returned 20 event rows. Visible examples include scroll, user_engagement, view_item, and session_start on 20210105. This is a limited preview, not a frequency ranking.
+
+## Query 02: Filtering purchase events
+
+### SQL
+
+```sql
+SELECT event_date, event_name, user_pseudo_id
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE event_name = 'purchase'
+LIMIT 50;
+```
+
+### Explanation and interpretation
+
+Keeps only purchase events and returns at most 50 rows with the date, event name, and pseudonymous user identifier. A user can appear more than once because these are event rows, not distinct users. The query does not specify an output order.
+
+### BigQuery output
+
+![BigQuery results for Query 02](images/query-02.png){fig-alt="Actual BigQuery SQL and results for Query 02"}
+
+**Observed output.** The result returned 50 purchase event rows. The visible rows are dated 20201224 and have different pseudonymous user identifiers. Because no date filter or sorting is applied, these rows do not establish the first or latest purchases.
+
+## Query 03: Sorting purchases by timestamp
+
+### SQL
+
+```sql
+SELECT event_date, event_timestamp, event_name
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE event_name = 'purchase'
+ORDER BY event_timestamp DESC
+LIMIT 20;
+```
+
+### Explanation and interpretation
+
+Returns the 20 most recent purchase events in the sample, ordered from the largest event timestamp to the smallest. GA4 stores event_timestamp as microseconds since the Unix epoch. Events with equal timestamps may appear in either order.
+
+### BigQuery output
+
+![BigQuery results for Query 03](images/query-03.png){fig-alt="Actual BigQuery SQL and results for Query 03"}
+
+**Observed output.** The result returned 20 purchase rows sorted newest first. The visible leading purchases are dated 20210131, and their event_timestamp values decrease down the table.
+
+## Query 04: Converting timestamps for readability
+
+### SQL
+
+```sql
+SELECT TIMESTAMP_MICROS(event_timestamp) AS event_time,
+       event_name
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+ORDER BY event_timestamp DESC
+LIMIT 10;
+```
+
+### Explanation and interpretation
+
+Converts the microsecond timestamp to a readable TIMESTAMP named event_time and returns the 10 most recent events. This example includes all event types because it has no purchase filter. TIMESTAMP represents an absolute point in time; the default BigQuery display is UTC.
+
+### BigQuery output
+
+![BigQuery results for Query 04](images/query-04.png){fig-alt="Actual BigQuery SQL and results for Query 04"}
+
+**Observed output.** The result returned 10 event rows. The newest visible timestamp is 2021-01-31 23:59:55.412363 UTC, shared by view_promotion, page_view, and user_engagement. Equal timestamps illustrate why a secondary sort would be needed for a fixed order among ties.
+
+## Query 05: Counting all December events
+
+### SQL
+
+```sql
+SELECT COUNT(*) AS event_count
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201201' AND '20201231';
+```
+
+### Explanation and interpretation
+
+Counts all event rows in the daily tables for December 1 through December 31, 2020, inclusive. The result has one row and one column, event_count. It measures recorded events, not distinct people or sessions.
+
+### BigQuery output
+
+![BigQuery results for Query 05](images/query-05.png){fig-alt="Actual BigQuery SQL and results for Query 05"}
+
+**Observed output.** December 2020 contains **1,612,725 event rows**. This single total is the baseline for the monthly grouped summaries.
+
+## Query 06: Counting December purchases
+
+### SQL
+
+```sql
+SELECT COUNT(*) AS purchase_events
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE event_name = 'purchase'
+  AND _TABLE_SUFFIX BETWEEN '20201201' AND '20201231';
+```
+
+### Explanation and interpretation
+
+Counts event rows named purchase in the December 2020 daily tables. The single value purchase_events is a count of purchase events; this query does not calculate revenue or count distinct transaction identifiers.
+
+### BigQuery output
+
+![BigQuery results for Query 06](images/query-06.png){fig-alt="Actual BigQuery SQL and results for Query 06"}
+
+**Observed output.** December 2020 contains **2,434 purchase events**. These are about 0.151% of all December event rows; this is an event share, not a user or session conversion rate.
+
+## Query 07: Grouping events by day
+
+### SQL
+
+```sql
+SELECT event_date, COUNT(*) AS events
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201201' AND '20201231'
+GROUP BY event_date
+ORDER BY event_date;
+```
+
+### Explanation and interpretation
+
+Counts events separately for each event_date in the December tables. Each output row represents one date, with its total recorded events. Ascending date order makes daily activity easier to compare. Dates with no rows would not appear.
+
+### BigQuery output
+
+![BigQuery results for Query 07](images/query-07.png){fig-alt="Actual BigQuery SQL and results for Query 07"}
+
+**Observed output.** The result contains **31 date groups**. December 1 has 71,804 events, December 2 has 66,832, December 3 has 71,689, December 4 has 69,393, and December 5 has 49,528. The visible counts show daily variation.
+
+## Query 08: Ranking the top event types
+
+### SQL
+
+```sql
+SELECT event_name, COUNT(*) AS events
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201201' AND '20201231'
+GROUP BY event_name
+ORDER BY events DESC
+LIMIT 15;
+```
+
+### Explanation and interpretation
+
+Counts December events by event name, sorts the counts from highest to lowest, and returns at most 15 event types. Each row represents a type of event, rather than an individual event. Tied counts have no specified secondary order.
+
+### BigQuery output
+
+![BigQuery results for Query 08](images/query-08.png){fig-alt="Actual BigQuery SQL and results for Query 08"}
+
+**Observed output.** The result contains **15 event types**. The leading types are page_view (477,520), user_engagement (401,428), scroll (183,220), view_item (150,458), and session_start (131,836). Page views are the most common event type in December.
+
+## Query 09: Filtering groups with HAVING
+
+### SQL
+
+```sql
+SELECT event_name, COUNT(*) AS events
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201201' AND '20201231'
+GROUP BY event_name
+HAVING COUNT(*) >= 50000
+ORDER BY events DESC;
+```
+
+### Explanation and interpretation
+
+First restricts the source to December tables, then counts rows by event name. HAVING keeps only event types with at least 50,000 events, including exactly 50,000. WHERE filters source rows before aggregation; HAVING filters groups after aggregation.
+
+### BigQuery output
+
+![BigQuery results for Query 09](images/query-09.png){fig-alt="Actual BigQuery SQL and results for Query 09"}
+
+**Observed output.** **Seven event types** meet the threshold of at least 50,000 events. The visible leading types and counts agree with the ranking query. Purchase events are excluded because the December purchase count of 2,434 is below the threshold.
+
+## Query 10: Querying a week with wildcard tables
+
+### SQL
+
+```sql
+SELECT event_date, COUNT(*) AS events
+FROM `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`
+WHERE _TABLE_SUFFIX BETWEEN '20201201' AND '20201207'
+GROUP BY event_date
+ORDER BY event_date;
+```
+
+### Explanation and interpretation
+
+Uses events_* to match daily tables and _TABLE_SUFFIX to select December 1–7, 2020, inclusive. It counts events for each date and sorts chronologically. The suffix is the portion of each table name after events_. A constant suffix range restricts the tables read.
+
+### BigQuery output
+
+![BigQuery results for Query 10](images/query-10.png){fig-alt="Actual BigQuery SQL and results for Query 10"}
+
+**Observed output.** The result contains **seven daily groups**, covering December 1–7. The visible first five counts match the corresponding rows in the full-month grouping. The query estimate is 4.23 MB, compared with 15.38 MB for the full-month daily grouping, illustrating the effect of narrowing the table suffix range.
+
+# Key concepts
+
+The source data has one row per event. Selecting and filtering preserve that event-level detail. COUNT(*) summarizes rows, while GROUP BY changes the output to one row per date or event type. ORDER BY controls presentation order, and HAVING applies conditions to aggregated groups. The wildcard selects daily tables; _TABLE_SUFFIX narrows the selected table dates.
+
+The lecture section is titled “COUNT, SUM, AVG, MIN, MAX,” but its supplied examples use COUNT only. This report preserves the supplied queries rather than adding unrelated examples.
+
+# Publication links
+
+- [GitHub Pages report](https://gmonjarrez.github.io/bigquery-sql-lecture1/).
+- [GitHub repository](https://github.com/gmonjarrez/bigquery-sql-lecture1).
+
+# Materials
+
+- Lecture 1 — BigQuery SQL Basics: course screenshots supplied by the student.
+- [Export Google Analytics data to BigQuery](https://youtu.be/hQEBtxWaGM4).
+- [Full Google Analytics + BigQuery tutorial for beginners](https://youtu.be/YOhXKCLPLVA).
